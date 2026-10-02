@@ -61,6 +61,17 @@ public:
 #include "AIE2PSGenFormats.inc"
 #undef GET_FORMATS_SLOTKINDS
   };
+#ifdef LLVM_AIE_EXTRA_SLOTKINDS_INC
+  // A target outside lib/Target/AIE that reuses this format machinery (the
+  // MiniTPU spike) names its generated Formats .inc here, so the slot kinds
+  // CodeGenFormat emits as MCSlotKind::<TARGET>_SLOT_<NAME> resolve. Only that
+  // target's translation units define the macro; the class layout is unchanged.
+  enum ExtraSlotKind : int {
+#define GET_FORMATS_SLOTKINDS
+#include LLVM_AIE_EXTRA_SLOTKINDS_INC
+#undef GET_FORMATS_SLOTKINDS
+  };
+#endif
 
   /// Ctor with SlotKind initialization.
   constexpr MCSlotKind(int Kind) : Kind(Kind) {}

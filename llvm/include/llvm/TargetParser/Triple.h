@@ -61,6 +61,7 @@ public:
     aie2,        // AIE: Xilinx AIMLEngine
     aie2p,       // AIE: Xilinx AIMLEngine+
     aie2ps,      // AIE: Xilinx AIMLEngineps
+    minitpu,     // MiniTPU: a 128-bit VLIW tensor unit (spike)
     arc,         // ARC: Synopsys ARC
     avr,         // AVR: Atmel AVR microcontroller
     bpfel,       // eBPF or extended BPF or 64-bit BPF (little endian)
