@@ -1,0 +1,42 @@
+# In-order post-RA scheduling: placed bundles stay whole, stalls fold into DELAY.
+# RUN: llc -mtriple=minitpu -run-pass=postmisched,minitpu-fold-delays %s -o - | FileCheck %s
+# RUN: not llc -mtriple=minitpu -run-pass=postmisched %S/Inputs/slat.mir -o /dev/null 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SLAT
+
+# vld W=6 -> vadd needs 7; vadd W=5 -> halt needs every write landed (6).
+# CHECK-LABEL: name: raw
+# CHECK:      $v1 = VLD 0
+# CHECK-NEXT: DELAY 6
+# CHECK:      $v2 = VADD $v1, $v1
+# CHECK-NEXT: DELAY 5
+# CHECK:      HALT
+# CHECK-NEXT: DELAY 0
+
+# vmatpush -> its vmatpop: 85 (MiniTPUScheduleFacts), so the push bundle holds 84.
+# CHECK-LABEL: name: pop
+# CHECK:      VMATPUSH killed $v12
+# CHECK-NEXT: DELAY 84
+
+# SLAT: S_LAT: VMEMLD
+---
+name: raw
+tracksRegLiveness: false
+body: |
+  bb.0:
+    $v1 = VLD 0
+    DELAY 0
+    $v2 = VADD $v1, $v1
+    DELAY 0
+    HALT implicit $dmaq, implicit $v0, implicit $v1, implicit $v2, implicit $v3, implicit $v4, implicit $v5, implicit $v6, implicit $v7, implicit $v8, implicit $v9, implicit $v10, implicit $v11, implicit $v12, implicit $v13, implicit $v14, implicit $v15, implicit $v16, implicit $v17, implicit $v18, implicit $v19, implicit $v20, implicit $v21, implicit $v22, implicit $v23, implicit $v24, implicit $v25, implicit $v26, implicit $v27, implicit $v28, implicit $v29, implicit $v30, implicit $v31
+    DELAY 0
+...
+---
+name: pop
+tracksRegLiveness: false
+body: |
+  bb.0:
+    VMATPUSH $v12, implicit-def $mxufifo, implicit $mxufifo, implicit $mxuwgt
+    DELAY 0
+    $v13 = VMATPOP implicit-def $mxufifo, implicit $mxufifo
+    DELAY 0
+...

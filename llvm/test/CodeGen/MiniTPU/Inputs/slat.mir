@@ -1,0 +1,13 @@
+# A descriptor one bundle after the saddi writing its base: S_LAT is 2 BUNDLES, and a
+# delay field is not a bundle, so no stall can make it legal; it is refused.
+---
+name: slat
+tracksRegLiveness: false
+body: |
+  bb.0:
+    $s1 = SADDI $s1
+    IMM 8
+    DELAY 20
+    VMEMLD 0, 0, 1, $s1, $s0, implicit-def $dmaq, implicit $dmaq
+    DELAY 0
+...
