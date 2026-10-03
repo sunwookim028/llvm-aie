@@ -9,10 +9,11 @@ tablegen(LLVM MiniTPUGenAsmMatcher.inc -gen-asm-matcher)
 tablegen(LLVM MiniTPUGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM MiniTPUGenDisassemblerTables.inc -gen-disassembler)
 tablegen(LLVM MiniTPUGenFormats.inc -gen-instr-format)
-tablegen(LLVM MiniTPUGenInstrInfo.inc -gen-instr-info)
+tablegen(LLVM MiniTPUGenInstrInfo.inc -gen-instr-info -base-instrinfo-class AIEBaseInstrInfo)
 tablegen(LLVM MiniTPUGenMCCodeEmitter.inc -gen-emitter)
-tablegen(LLVM MiniTPUGenRegisterInfo.inc -gen-register-info)
-tablegen(LLVM MiniTPUGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM MiniTPUGenRegisterInfo.inc -gen-register-info -base-registerinfo-class AIEBaseRegisterInfo)
+tablegen(LLVM MiniTPUGenSubtargetInfo.inc -gen-subtarget -base-subtargetinfo-class AIEBaseSubtarget)
+tablegen(LLVM MiniTPUGenSearchableTables.inc -gen-searchable-tables)
 add_public_tablegen_target(MiniTPUCommonTableGen)
 
 # The AIE headers this target includes, and their generated tables.
@@ -20,15 +21,29 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../AIE ${CMAKE_CURRENT_BINARY_DI
 # Lets AIEMCFormats.h name this target's slot kinds (see the hook there).
 add_compile_definitions([[LLVM_AIE_EXTRA_SLOTKINDS_INC="MiniTPUGenFormats.inc"]])
 
-# No code generation yet: only the entry point InitializeAllTargets() calls.
+# CodeGen: just enough to run AIE's post-RA scheduler (postmisched) on MIR.
 add_llvm_target(MiniTPUCodeGen
+  MiniTPUFoldDelays.cpp
+  MiniTPUHazardRecognizer.cpp
+  MiniTPUInstrInfo.cpp
+  MiniTPURegisterInfo.cpp
+  MiniTPUScheduleMutations.cpp
+  MiniTPUSubtarget.cpp
   MiniTPUTargetMachine.cpp
 
   LINK_COMPONENTS
+  AIECodeGen
+  AIEDesc
+  CodeGen
+  CodeGenTypes
+  Core
+  MC
   MiniTPUDesc
   MiniTPUInfo
+  SelectionDAG
   Support
   Target
+  TargetParser
 
   ADD_TO_COMPONENT
   MiniTPU
