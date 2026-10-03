@@ -20,12 +20,18 @@ def MXU_STREAM_ENGINE : FuncUnit;
 def MXU_POP_ENGINE : FuncUnit;
 def MXU_WEIGHT_BANK_0 : FuncUnit;  // declared; the switch rule is below, not a stage
 def MXU_WEIGHT_BANK_1 : FuncUnit;  // declared; the switch rule is below, not a stage
+// One a bundle, held for the issue cycle only (gen_isa_td.issue_claims says who claims each).
+def ISSUE_IMM : FuncUnit;  // one IMM a bundle: asm._imm_owners() (ISA-A01)
+def ISSUE_NEXT_STATE : FuncUnit;  // descriptor or control op: isa_slots.json issue_exclusive
+def ISSUE_PORT_C : FuncUnit;  // one consumer of contended VREG read port C a bundle (ISA-E04)
 
-def II_C : InstrItinClass;
+def II_C_IMM_NEXT_STATE : InstrItinClass;
+def II_C_NEXT_STATE : InstrItinClass;
 def II_DELAY : InstrItinClass;
 def II_IMM : InstrItinClass;
 def II_NOP : InstrItinClass;
 def II_S : InstrItinClass;
+def II_S_IMM : InstrItinClass;
 def II_VADD : InstrItinClass;
 def II_VEXP : InstrItinClass;
 def II_VGELU : InstrItinClass;
@@ -35,8 +41,10 @@ def II_VMATLOAD : InstrItinClass;
 def II_VMATPOP : InstrItinClass;
 def II_VMATPUSH : InstrItinClass;
 def II_VMAX : InstrItinClass;
-def II_VMEMLD : InstrItinClass;
-def II_VMEMST : InstrItinClass;
+def II_VMEMLD_IMM_NEXT_STATE : InstrItinClass;
+def II_VMEMLD_NEXT_STATE : InstrItinClass;
+def II_VMEMST_IMM_NEXT_STATE : InstrItinClass;
+def II_VMEMST_NEXT_STATE : InstrItinClass;
 def II_VMIN : InstrItinClass;
 def II_VMOV : InstrItinClass;
 def II_VMUL : InstrItinClass;
@@ -50,23 +58,27 @@ def II_VTXIN : InstrItinClass;
 def II_VTXOUT : InstrItinClass;
 
 def MiniTPUItineraries : ProcessorItineraries<
-  [EMPTY_FU, VREG_WRITE_PORT, VREG_READ_PORT_C, MXU_STREAM_ENGINE, MXU_POP_ENGINE, MXU_WEIGHT_BANK_0, MXU_WEIGHT_BANK_1], [], [
-  InstrItinData<II_C, [], []>,
+  [EMPTY_FU, VREG_WRITE_PORT, VREG_READ_PORT_C, MXU_STREAM_ENGINE, MXU_POP_ENGINE, MXU_WEIGHT_BANK_0, MXU_WEIGHT_BANK_1, ISSUE_IMM, ISSUE_NEXT_STATE, ISSUE_PORT_C], [], [
+  InstrItinData<II_C_IMM_NEXT_STATE, [InstrStage<1, [ISSUE_IMM], 0>, InstrStage<1, [ISSUE_NEXT_STATE], 0>], []>,
+  InstrItinData<II_C_NEXT_STATE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>], []>,
   InstrItinData<II_DELAY, [], [0, 0, 0, 0, 0]>,
   InstrItinData<II_IMM, [], [0, 0, 0, 0, 0]>,
   InstrItinData<II_NOP, [], []>,
-  InstrItinData<II_S, [], [2, 0, 0, 0]>,
+  InstrItinData<II_S, [], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_S_IMM, [InstrStage<1, [ISSUE_IMM], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VADD, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
   InstrItinData<II_VEXP, [InstrStage<0, [EMPTY_FU], 7>, InstrStage<1, [VREG_WRITE_PORT]>], [7, 0, 0, 0]>,
   InstrItinData<II_VGELU, [InstrStage<0, [EMPTY_FU], 7>, InstrStage<1, [VREG_WRITE_PORT]>], [7, 0, 0, 0]>,
   InstrItinData<II_VLANERED, [InstrStage<0, [EMPTY_FU], 11>, InstrStage<1, [VREG_WRITE_PORT]>], [11, 0, 0, 0]>,
   InstrItinData<II_VLD, [InstrStage<0, [EMPTY_FU], 6>, InstrStage<1, [VREG_WRITE_PORT]>], [6, 0, 0, 0]>,
-  InstrItinData<II_VMATLOAD, [InstrStage<16, [MXU_STREAM_ENGINE], 0>, InstrStage<0, [EMPTY_FU], 1>, InstrStage<16, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMATLOAD, [InstrStage<1, [ISSUE_PORT_C], 0>, InstrStage<16, [MXU_STREAM_ENGINE], 0>, InstrStage<0, [EMPTY_FU], 1>, InstrStage<16, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VMATPOP, [InstrStage<1, [MXU_POP_ENGINE], 0>, InstrStage<0, [EMPTY_FU], 3>, InstrStage<1, [VREG_WRITE_PORT]>], [3, 0, 0, 0]>,
-  InstrItinData<II_VMATPUSH, [InstrStage<4, [MXU_STREAM_ENGINE], 0>, InstrStage<0, [EMPTY_FU], 1>, InstrStage<4, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMATPUSH, [InstrStage<1, [ISSUE_PORT_C], 0>, InstrStage<4, [MXU_STREAM_ENGINE], 0>, InstrStage<0, [EMPTY_FU], 1>, InstrStage<4, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VMAX, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
-  InstrItinData<II_VMEMLD, [], [0, 0, 0, 0, 0]>,
-  InstrItinData<II_VMEMST, [], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMEMLD_IMM_NEXT_STATE, [InstrStage<1, [ISSUE_IMM], 0>, InstrStage<1, [ISSUE_NEXT_STATE], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMEMLD_NEXT_STATE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMEMST_IMM_NEXT_STATE, [InstrStage<1, [ISSUE_IMM], 0>, InstrStage<1, [ISSUE_NEXT_STATE], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VMEMST_NEXT_STATE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VMIN, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
   InstrItinData<II_VMOV, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
   InstrItinData<II_VMUL, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
@@ -74,31 +86,41 @@ def MiniTPUItineraries : ProcessorItineraries<
   InstrItinData<II_VREDMAX, [InstrStage<0, [EMPTY_FU], 15>, InstrStage<1, [VREG_WRITE_PORT]>], [15, 0, 0, 0]>,
   InstrItinData<II_VREDSUM, [InstrStage<0, [EMPTY_FU], 15>, InstrStage<1, [VREG_WRITE_PORT]>], [15, 0, 0, 0]>,
   InstrItinData<II_VRSQRT, [InstrStage<0, [EMPTY_FU], 7>, InstrStage<1, [VREG_WRITE_PORT]>], [7, 0, 0, 0]>,
-  InstrItinData<II_VST, [InstrStage<1, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_VST, [InstrStage<1, [ISSUE_PORT_C], 0>, InstrStage<1, [VREG_READ_PORT_C], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VSUB, [InstrStage<0, [EMPTY_FU], 5>, InstrStage<1, [VREG_WRITE_PORT]>], [5, 0, 0, 0]>,
   InstrItinData<II_VTXIN, [], [0, 0, 0, 0, 0]>,
   InstrItinData<II_VTXOUT, [InstrStage<0, [EMPTY_FU], 3>, InstrStage<1, [VREG_WRITE_PORT]>], [3, 0, 0, 0]>
 ]>;
 
 def MiniTPUSchedModel : SchedMachineModel {
-  let IssueWidth = 1;   // one bundle a cycle
+  let IssueWidth = 7;   // one bundle a cycle, one instruction a slot
   let Itineraries = MiniTPUItineraries;
   let CompleteModel = 0;
 }
 
 // What an itinerary cannot express: each depends on an EARLIER instruction of another
 // kind (the oldest unpopped vmatpush, the vmatload two back), on program-order counting,
-// or on bundles rather than cycles. A hazard recognizer reads these; nothing else may
-// restate them.
-def MiniTPUScheduleFacts {
-  int VmatpushResultLatency = 85;
-  int WeightSwitchSpan = 75;
-  int WeightBanks = 2;
-  int OutputFifoDepth = 64;
-  int OutputFifoEntriesPerPush = 4;
-  int OutputFifoEntriesPerPop = 4;
-  int ScalarLatencyBundles = 2;
-  int MaxDelay = 127;
-  int LoopBufferBundles = 24;
-  int MaxSkippableLoops = 8;
+// or on bundles rather than cycles. The C++ reads them by name from this table; nothing
+// else may restate them.
+class MiniTPUScheduleFact<string name, int value> {
+  string Name = name;
+  bits<16> Value = value;
+}
+def : MiniTPUScheduleFact<"VmatpushResultLatency", 85>;
+def : MiniTPUScheduleFact<"WeightSwitchSpan", 75>;
+def : MiniTPUScheduleFact<"WeightBanks", 2>;
+def : MiniTPUScheduleFact<"OutputFifoDepth", 64>;
+def : MiniTPUScheduleFact<"OutputFifoEntriesPerPush", 4>;
+def : MiniTPUScheduleFact<"OutputFifoEntriesPerPop", 4>;
+def : MiniTPUScheduleFact<"ScalarLatencyBundles", 2>;
+def : MiniTPUScheduleFact<"MaxDelay", 127>;
+def : MiniTPUScheduleFact<"LoopBufferBundles", 24>;
+def : MiniTPUScheduleFact<"MaxSkippableLoops", 8>;
+def : MiniTPUScheduleFact<"VmatloadStreamLast", 16>;
+def : MiniTPUScheduleFact<"VmatpushStreamLast", 4>;
+def : MiniTPUScheduleFact<"StreamCyclesPerVreg", 4>;
+def : MiniTPUScheduleFact<"VmatloadVregs", 4>;
+def MiniTPUScheduleFacts : GenericTable {
+  let FilterClass = "MiniTPUScheduleFact";
+  let Fields = ["Name", "Value"];
 }

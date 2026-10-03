@@ -99,3 +99,9 @@ static const struct { unsigned Opcode, OpIdx; int64_t Lo, Hi; } OperandRanges[] 
     {MiniTPU::DELAY, 0, 0, 127},
 };
 #endif // GET_OPERAND_RANGES
+
+#ifdef GET_FUNCUNIT_NAMES
+#undef GET_FUNCUNIT_NAMES
+// Bit i of an itinerary stage's unit mask names entry i.
+static const char *const FuncUnitNames[] = {"EMPTY_FU", "VREG_WRITE_PORT", "VREG_READ_PORT_C", "MXU_STREAM_ENGINE", "MXU_POP_ENGINE", "MXU_WEIGHT_BANK_0", "MXU_WEIGHT_BANK_1", "ISSUE_IMM", "ISSUE_NEXT_STATE", "ISSUE_PORT_C"};
+#endif // GET_FUNCUNIT_NAMES

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 include "llvm/Target/Target.td"
+include "llvm/TableGen/SearchableTable.td"
 include "llvm/Target/AIETarget.td"
 include "llvm/Target/CodeGenFormat.td"
 include "AIEBaseInstrInfo.td"

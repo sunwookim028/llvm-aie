@@ -14,6 +14,8 @@ using namespace llvm;
 #define GET_INSTRINFO_MC_DESC
 #include "MiniTPUGenInstrInfo.inc"
 
+// AIE's scoreboard indexes FuncUnits; a stage names one unit by number.
+#define FUNCUNIT_REPRESENTATION(x) (x)
 #define GET_SUBTARGETINFO_MC_DESC
 #include "MiniTPUGenSubtargetInfo.inc"
 
@@ -34,6 +36,10 @@ static MCRegisterInfo *createMiniTPUMCRegisterInfo(const Triple &TT) {
 
 static MCSubtargetInfo *createMiniTPUMCSubtargetInfo(const Triple &TT,
                                                      StringRef CPU, StringRef FS) {
+  // The itineraries hang off the one processor model; an empty CPU would get
+  // none, and the assembler's bundle check reads them.
+  if (CPU.empty())
+    CPU = "minitpu";
   return createMiniTPUMCSubtargetInfoImpl(TT, CPU, CPU, FS);
 }
 

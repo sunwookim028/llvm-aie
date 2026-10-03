@@ -65,3 +65,14 @@ def SREG : RegisterClass<"MiniTPU", [i32], 32, (sequence "S%u", 0, 3)>;
 def ARG : RegisterClass<"MiniTPU", [i32], 32, (sequence "A%u", 0, 3)> {
   let isAllocatable = 0;
 }
+
+// Placeholders for machine state no register names. They order the instructions that share the
+// state and carry no latency; they are never encoded.
+def TILE : MiniTPUReg<0, "tile">;   // the transpose staging tile (vtxin writes, vtxout reads)
+def MXUFIFO : MiniTPUReg<1, "mxufifo">;   // the MXU output FIFO (vmatpush appends, vmatpop drains)
+def MXUWGT : MiniTPUReg<2, "mxuwgt">;   // the MXU pending weight banks (vmatload fills, vmatpush uses)
+def DMAQ : MiniTPUReg<3, "dmaq">;   // the DMA channels (descriptors, wait.channel, halt)
+def LOOPS : MiniTPUReg<4, "loops">;   // the loop stack and induction variables
+def STATE : RegisterClass<"MiniTPU", [i32], 32, (add TILE, MXUFIFO, MXUWGT, DMAQ, LOOPS)> {
+  let isAllocatable = 0;
+}

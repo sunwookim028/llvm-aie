@@ -144,6 +144,8 @@ def VLANEMAX : MiniTPUInst_V<(outs VREG:$vd), (ins VREG:$va),
 def VTXIN : MiniTPUInst_V<(outs ), (ins VREG:$va, uimm5_0_3:$beat),
     "vtxin", "$va, $beat"> {
   let Itinerary = II_VTXIN;
+  let Defs = [TILE];
+  let Uses = [TILE];
   bits<5> va;
   bits<5> beat;
   let v = {0b01101, 0b00000, va{4-0}, beat{4-0}};
@@ -152,6 +154,7 @@ def VTXIN : MiniTPUInst_V<(outs ), (ins VREG:$va, uimm5_0_3:$beat),
 def VTXOUT : MiniTPUInst_V<(outs VREG:$vd), (ins uimm5_0_3:$beat),
     "vtxout", "$vd, $beat"> {
   let Itinerary = II_VTXOUT;
+  let Uses = [TILE];
   bits<5> vd;
   bits<5> beat;
   let v = {0b01110, vd{4-0}, 0b00000, beat{4-0}};
@@ -167,6 +170,8 @@ def NOPV : MiniTPUInst_V<(outs ), (ins ),
 def VMATLOAD : MiniTPUInst_M<(outs ), (ins VREG:$vr),
     "vmatload", "$vr"> {
   let Itinerary = II_VMATLOAD;
+  let Defs = [MXUWGT];
+  let Uses = [MXUWGT];
   bits<5> vr;
   let m = {0b001, vr{4-0}};
 }
@@ -174,6 +179,8 @@ def VMATLOAD : MiniTPUInst_M<(outs ), (ins VREG:$vr),
 def VMATPUSH : MiniTPUInst_M<(outs ), (ins VREG:$vr),
     "vmatpush", "$vr"> {
   let Itinerary = II_VMATPUSH;
+  let Defs = [MXUFIFO];
+  let Uses = [MXUFIFO, MXUWGT];
   bits<5> vr;
   let m = {0b010, vr{4-0}};
 }
@@ -181,6 +188,8 @@ def VMATPUSH : MiniTPUInst_M<(outs ), (ins VREG:$vr),
 def VMATPOP : MiniTPUInst_M<(outs VREG:$vr), (ins ),
     "vmatpop", "$vr"> {
   let Itinerary = II_VMATPOP;
+  let Defs = [MXUFIFO];
+  let Uses = [MXUFIFO];
   bits<5> vr;
   let m = {0b011, vr{4-0}};
 }
@@ -203,6 +212,7 @@ def VLD : MiniTPUInst_Mem<(outs VREG:$vd), (ins uimm12_0_4095:$word),
 def VLD_AGU : MiniTPUInst_Mem<(outs VREG:$vd), (ins uimm12_0_4095:$word, uimm3_0_7:$level, uimm4_0_15:$shift),
     "vld.agu", "$vd, $word, $level, $shift"> {
   let Itinerary = II_VLD;
+  let Uses = [LOOPS];
   bits<5> vd;
   bits<12> word;
   bits<3> level;
@@ -221,6 +231,7 @@ def VST : MiniTPUInst_Mem<(outs ), (ins VREG:$vs, uimm12_0_4095:$word),
 def VST_AGU : MiniTPUInst_Mem<(outs ), (ins VREG:$vs, uimm12_0_4095:$word, uimm3_0_7:$level, uimm4_0_15:$shift),
     "vst.agu", "$vs, $word, $level, $shift"> {
   let Itinerary = II_VST;
+  let Uses = [LOOPS];
   bits<5> vs;
   bits<12> word;
   bits<3> level;
@@ -230,7 +241,10 @@ def VST_AGU : MiniTPUInst_Mem<(outs ), (ins VREG:$vs, uimm12_0_4095:$word, uimm3
 
 def VMEMLD : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, uimm12m1_1_4096:$rows, SREG:$base, SREG:$stride),
     "vmemld", "$ch, $word, $rows, $base, $stride"> {
-  let Itinerary = II_VMEMLD;
+  let Itinerary = II_VMEMLD_NEXT_STATE;
+  let Defs = [DMAQ];
+  let Uses = [DMAQ];
+  let hasSideEffects = 1;
   bits<2> ch;
   bits<12> word;
   bits<12> rows;
@@ -241,7 +255,10 @@ def VMEMLD : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, u
 
 def VMEMLD_D : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, uimm12m1_1_4096:$rows, SREG:$base, SREG:$stride),
     "vmemld.d", "$ch, $word, $rows, $base, $stride"> {
-  let Itinerary = II_VMEMLD;
+  let Itinerary = II_VMEMLD_IMM_NEXT_STATE;
+  let Defs = [DMAQ];
+  let Uses = [DMAQ];
+  let hasSideEffects = 1;
   bits<2> ch;
   bits<12> word;
   bits<12> rows;
@@ -252,7 +269,10 @@ def VMEMLD_D : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word,
 
 def VMEMST : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, uimm12m1_1_4096:$rows, SREG:$base, SREG:$stride),
     "vmemst", "$ch, $word, $rows, $base, $stride"> {
-  let Itinerary = II_VMEMST;
+  let Itinerary = II_VMEMST_NEXT_STATE;
+  let Defs = [DMAQ];
+  let Uses = [DMAQ];
+  let hasSideEffects = 1;
   bits<2> ch;
   bits<12> word;
   bits<12> rows;
@@ -263,7 +283,10 @@ def VMEMST : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, u
 
 def VMEMST_D : MiniTPUInst_Mem<(outs ), (ins uimm2_0_1:$ch, uimm12_0_4095:$word, uimm12m1_1_4096:$rows, SREG:$base, SREG:$stride),
     "vmemst.d", "$ch, $word, $rows, $base, $stride"> {
-  let Itinerary = II_VMEMST;
+  let Itinerary = II_VMEMST_IMM_NEXT_STATE;
+  let Defs = [DMAQ];
+  let Uses = [DMAQ];
+  let hasSideEffects = 1;
   bits<2> ch;
   bits<12> word;
   bits<12> rows;
@@ -281,7 +304,7 @@ def NOPMEM : MiniTPUInst_Mem<(outs ), (ins ),
 
 def SMOVI : MiniTPUInst_S<(outs SREG:$sd), (ins ),
     "smovi", "$sd"> {
-  let Itinerary = II_S;
+  let Itinerary = II_S_IMM;
   bits<2> sd;
   let s = {0b1, 0b000, sd{1-0}, 0b00, 0b0, 0b00, 0b0, 0b0};
 }
@@ -296,7 +319,7 @@ def SMOV_ARG : MiniTPUInst_S<(outs SREG:$sd), (ins ARG:$arg),
 
 def SADDI : MiniTPUInst_S<(outs SREG:$sd), (ins SREG:$ss),
     "saddi", "$sd, $ss"> {
-  let Itinerary = II_S;
+  let Itinerary = II_S_IMM;
   bits<2> sd;
   bits<2> ss;
   let s = {0b1, 0b010, sd{1-0}, ss{1-0}, 0b0, 0b00, 0b0, 0b0};
@@ -304,7 +327,7 @@ def SADDI : MiniTPUInst_S<(outs SREG:$sd), (ins SREG:$ss),
 
 def SMAC : MiniTPUInst_S<(outs SREG:$sd), (ins SREG:$ss),
     "smac", "$sd, $ss"> {
-  let Itinerary = II_S;
+  let Itinerary = II_S_IMM;
   bits<2> sd;
   bits<2> ss;
   let s = {0b1, 0b011, sd{1-0}, ss{1-0}, 0b0, 0b00, 0b0, 0b0};
@@ -312,7 +335,7 @@ def SMAC : MiniTPUInst_S<(outs SREG:$sd), (ins SREG:$ss),
 
 def SSHL : MiniTPUInst_S<(outs SREG:$sd), (ins SREG:$ss),
     "sshl", "$sd, $ss"> {
-  let Itinerary = II_S;
+  let Itinerary = II_S_IMM;
   bits<2> sd;
   bits<2> ss;
   let s = {0b1, 0b100, sd{1-0}, ss{1-0}, 0b0, 0b00, 0b0, 0b0};
@@ -334,39 +357,56 @@ def NOP : MiniTPUInst_C<(outs ), (ins ),
 
 def LOOP_BEGIN : MiniTPUInst_C<(outs ), (ins ),
     "loop.begin", ""> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_IMM_NEXT_STATE;
+  let Defs = [LOOPS];
+  let Uses = [LOOPS];
+  let hasSideEffects = 1;
   let c = {0b001, 0b0000};
 }
 
 def LOOP_END : MiniTPUInst_C<(outs ), (ins ),
     "loop.end", ""> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_NEXT_STATE;
+  let Defs = [LOOPS];
+  let Uses = [LOOPS];
+  let hasSideEffects = 1;
   let c = {0b010, 0b0000};
 }
 
 def HALT : MiniTPUInst_C<(outs ), (ins ),
     "halt", ""> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_NEXT_STATE;
+  let Uses = [DMAQ, V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31];
+  let hasSideEffects = 1;
   let c = {0b100, 0b0000};
 }
 
 def WAIT_CHANNEL : MiniTPUInst_C<(outs ), (ins uimm4_0_3:$mask),
     "wait.channel", "$mask"> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_NEXT_STATE;
+  let Defs = [DMAQ];
+  let Uses = [DMAQ];
+  let hasSideEffects = 1;
   bits<4> mask;
   let c = {0b011, mask{3-0}};
 }
 
 def LOOP_BEGIN_R_S : MiniTPUInst_C<(outs ), (ins SREG:$bound),
     "loop.begin.r", "$bound"> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_IMM_NEXT_STATE;
+  let Defs = [LOOPS];
+  let Uses = [LOOPS];
+  let hasSideEffects = 1;
   bits<2> bound;
   let c = {0b101, 0b0, 0b0, bound{1-0}};
 }
 
 def LOOP_BEGIN_R_A : MiniTPUInst_C<(outs ), (ins ARG:$bound),
     "loop.begin.r", "$bound"> {
-  let Itinerary = II_C;
+  let Itinerary = II_C_IMM_NEXT_STATE;
+  let Defs = [LOOPS];
+  let Uses = [LOOPS];
+  let hasSideEffects = 1;
   bits<2> bound;
   let c = {0b101, 0b0, 0b1, bound{1-0}};
 }
