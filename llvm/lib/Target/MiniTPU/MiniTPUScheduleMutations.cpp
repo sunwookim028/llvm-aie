@@ -9,6 +9,7 @@
 #include "MiniTPUInstrInfo.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Debug.h"
 #include <deque>
 
 using namespace llvm;
@@ -25,13 +26,16 @@ static void addEdge(SUnit &From, SUnit &To, unsigned Latency) {
   To.addPred(D, /*Required=*/true);
 }
 
-/// Set the latency of the edge Pred -> SU, in both directions.
+/// Set the latency of the edge Pred -> SU, in both directions. The two sides
+/// are matched by what they connect, not by latency: AIE's region-end edges
+/// arrive with the two sides already carrying different latencies (16 against
+/// 17 on a vmatload's exit edge), and SDep::operator== compares the latency.
 static void setEdgeLatency(SUnit &SU, SDep &PredEdge, unsigned Latency) {
   SUnit *Pred = PredEdge.getSUnit();
   SDep Forward = PredEdge;
   Forward.setSUnit(&SU);
   for (SDep &S : Pred->Succs)
-    if (S == Forward)
+    if (S.overlaps(Forward))
       S.setLatency(Latency);
   PredEdge.setLatency(Latency);
   SU.setDepthDirty();
@@ -296,11 +300,16 @@ class ControlSinkExit : public ScheduleDAGMutation {
         EndsInHalt = SU.getInstr()->getOpcode() == MiniTPU::HALT ||
                      (EndsInHalt && (SU.getInstr()->getOpcode() == MiniTPU::DELAY ||
                                      SU.getInstr()->getOpcode() == MiniTPU::DELAY_GROUP));
+    LLVM_DEBUG(dbgs() << "ControlSinkExit: EndsInHalt=" << EndsInHalt
+                      << " ExitSU preds=" << DAG->ExitSU.Preds.size() << "\n");
     if (!EndsInHalt)
       return;
     SUnit &ExitSU = DAG->ExitSU;
-    for (SDep &P : ExitSU.Preds)
+    for (SDep &P : ExitSU.Preds) {
+      LLVM_DEBUG(dbgs() << "  pred SU(" << P.getSUnit()->NodeNum << ") latency "
+                        << P.getLatency() << " -> 0\n");
       setEdgeLatency(ExitSU, P, 0);
+    }
   }
 };
 } // namespace

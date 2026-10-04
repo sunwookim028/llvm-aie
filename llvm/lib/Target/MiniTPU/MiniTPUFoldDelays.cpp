@@ -289,8 +289,16 @@ bool MiniTPUFoldDelays::runOnMachineFunction(MachineFunction &MF) {
         Changed = true;
       }
     MachineInstr *Prev = nullptr; // the DELAY of the last real bundle
+    bool PrevIsHalt = false;
     unsigned Run = 0;
     auto Flush = [&](MachineBasicBlock::iterator Before) {
+      if (PrevIsHalt) {
+        // halt ends the program: AIE pads the region end until nothing is in
+        // flight (an unknown successor), which asm.schedule() does not, and
+        // a halt word with a delay is not the halt word.
+        Run = 0;
+        return;
+      }
       if (!Run)
         return;
       if (!Prev) {
@@ -332,6 +340,9 @@ bool MiniTPUFoldDelays::runOnMachineFunction(MachineFunction &MF) {
         D->bundleWithPred();
       }
       Prev = D;
+      PrevIsHalt = llvm::any_of(
+          make_range(MI.getIterator(), getBundleEnd(MI.getIterator())),
+          [](const MachineInstr &I) { return I.getOpcode() == MiniTPU::HALT; });
     }
     Flush(MBB.end());
     if (!miniTPUInOrder())
