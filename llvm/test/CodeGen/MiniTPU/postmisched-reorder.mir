@@ -1,0 +1,50 @@
+# Reorder mode (gate G4): free V and LDST ops are re-placed between the pinned bundles, which stay whole
+# and in place; stalls fold into DELAY fields; S_LAT is re-derived as a literal empty bundle.
+# RUN: llc -mtriple=minitpu -run-pass=postmisched,minitpu-fold-delays -minitpu-in-order=false %s -o - \
+# RUN:   | FileCheck %s
+#
+# vld 9 has no dependence and is hoisted above the two vadds (program order: after the vsts).
+# CHECK-LABEL: name: reorder
+# CHECK:       VLD 9
+# CHECK:       VADD
+# CHECK:       VADD
+#
+# vst 6 then vld 6 touch one word: order kept, one cycle apart (MiniTPUInstrInfo::get{First,Last}MemoryCycle).
+# CHECK:       VST $v4, 6
+# CHECK-NEXT:  DELAY 0
+# CHECK-NEXT:  }
+# CHECK-NEXT:  $v7 = VLD 6
+#
+# The pinned saddi bundle (DELAY_GROUP) keeps its IMM; the descriptor reading s1 needs 2 BUNDLES
+# (ScalarLatencyBundles) after the write, so the stall cycle the hazard recognizer left is kept as a
+# literal empty bundle rather than folded into a delay field.
+# CHECK:       SADDI
+# CHECK-NEXT:  IMM 8
+# CHECK-NEXT:  DELAY 0
+# CHECK-NEXT:  }
+# CHECK-NEXT:  DELAY 0
+# CHECK-NEXT:  BUNDLE
+# CHECK-NEXT:  VMEMLD
+---
+name: reorder
+tracksRegLiveness: false
+body: |
+  bb.0:
+    $v1 = VLD 0 :: (load (s1024))
+    $v2 = VLD 1 :: (load (s1024))
+    $v3 = VADD $v1, $v1
+    $v4 = VADD $v2, $v2
+    VST $v3, 5 :: (store (s1024))
+    VST $v4, 6 :: (store (s1024))
+    $v7 = VLD 6 :: (load (s1024))
+    $v8 = VLD 9 :: (load (s1024))
+    $s1 = SADDI $s1
+    IMM 8
+    DELAY_GROUP 2, 0
+    VMEMLD 0, 0, 1, $s1, $s0, implicit-def $dmaq, implicit $dmaq
+    DELAY_GROUP 1, 0
+    WAIT_CHANNEL 1, implicit-def $dmaq, implicit $dmaq
+    DELAY_GROUP 1, 0
+    HALT implicit $dmaq, implicit $v0, implicit $v1, implicit $v2, implicit $v3, implicit $v4, implicit $v5, implicit $v6, implicit $v7, implicit $v8, implicit $v9, implicit $v10, implicit $v11, implicit $v12, implicit $v13, implicit $v14, implicit $v15, implicit $v16, implicit $v17, implicit $v18, implicit $v19, implicit $v20, implicit $v21, implicit $v22, implicit $v23, implicit $v24, implicit $v25, implicit $v26, implicit $v27, implicit $v28, implicit $v29, implicit $v30, implicit $v31
+    DELAY_GROUP 1, 0
+...

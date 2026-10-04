@@ -47,6 +47,27 @@ public:
   static unsigned operandCycle(const InstrItineraryData *ItinData,
                                const MachineInstr &MI, unsigned Idx);
 
+  /// VMEM through the compute port: a vld or vst holds the port for one cycle,
+  /// its issue cycle (docs/isa_latency.json, "Each access holds the VMEM
+  /// compute port for one cycle"). AIE's MemoryEdges mutation reads these to
+  /// time a vst -> vld, vld -> vst or vst -> vst pair: last - first + 1 = 1.
+  std::optional<int> getFirstMemoryCycle(unsigned SchedClass) const override;
+  std::optional<int> getLastMemoryCycle(unsigned SchedClass) const override;
+
+  /// Two vld/vst cannot meet when both address VMEM without the AGU at
+  /// different words, or through the AGU at the same loop level and shift
+  /// (the same index) at different words. Anything else may alias.
+  bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
+                                       const MachineInstr &MIb) const override;
+
+  // EXPERIMENTAL (docs/isa_experimental.json): the mock lock, through the
+  // hooks AIE's LockDelays mutation already reads.
+  bool isLock(unsigned Opc) const override;
+  bool isAcquire(unsigned Opc) const override;
+  bool isRelease(unsigned Opc) const override;
+  int getCoreStallCycleAfterLock() const override;
+  int getCoreResumeCycleAfterLock() const override;
+
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override {
     return 0;
   }

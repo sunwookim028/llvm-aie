@@ -14,6 +14,45 @@ static cl::opt<bool> SLatAllReaders(
              "(review finding M6-F2), not only descriptors and loop.begin.r "
              "as asm.py does"));
 
+bool llvm::miniTPUSLatAllReaders() { return SLatAllReaders; }
+
+static bool isIssueTimeSRegReader(unsigned Opc) {
+  switch (Opc) {
+  case MiniTPU::VMEMLD:
+  case MiniTPU::VMEMLD_D:
+  case MiniTPU::VMEMST:
+  case MiniTPU::VMEMST_D:
+  case MiniTPU::LOOP_BEGIN_R_S:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool isSOpReader(unsigned Opc) {
+  return Opc == MiniTPU::SADDI || Opc == MiniTPU::SMAC || Opc == MiniTPU::SSHL;
+}
+
+void llvm::miniTPUIssueTimeSRegReads(const MachineInstr &MI,
+                                     const TargetRegisterInfo *TRI,
+                                     SmallVectorImpl<unsigned> &Regs) {
+  if (!isIssueTimeSRegReader(MI.getOpcode()) &&
+      !(SLatAllReaders && isSOpReader(MI.getOpcode())))
+    return;
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.isUse() && !MO.isImplicit() &&
+        MiniTPU::SREGRegClass.contains(MO.getReg()))
+      Regs.push_back(TRI->getEncodingValue(MO.getReg()));
+}
+
+void llvm::miniTPUSRegWrites(const MachineInstr &MI,
+                             const TargetRegisterInfo *TRI,
+                             SmallVectorImpl<unsigned> &Regs) {
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.isDef() && MiniTPU::SREGRegClass.contains(MO.getReg()))
+      Regs.push_back(TRI->getEncodingValue(MO.getReg()));
+}
+
 MiniTPUHazardRecognizer::MiniTPUHazardRecognizer(const AIEBaseInstrInfo *TII,
                                                  const InstrItineraryData *II,
                                                  AIEAlternateDescriptors &Alt,
@@ -24,7 +63,7 @@ MiniTPUHazardRecognizer::MiniTPUHazardRecognizer(const AIEBaseInstrInfo *TII,
 MiniTPUBundleGroups &MiniTPUHazardRecognizer::groups() {
   if (!Groups) {
     Groups = std::make_unique<MiniTPUBundleGroups>(
-        const_cast<std::vector<SUnit> &>(DAG->SUnits));
+        const_cast<std::vector<SUnit> &>(DAG->SUnits), miniTPUInOrder());
     for (auto &G : Groups->Groups)
       checkBundleAlone(G);
   }
@@ -36,6 +75,18 @@ void MiniTPUHazardRecognizer::Reset() {
   Groups.reset();
   LastSWrite.clear();
   GroupsIssued = 0;
+  Cycle = 0;
+  LastSWriteCycle.clear();
+}
+
+void MiniTPUHazardRecognizer::AdvanceCycle() {
+  AIEHazardRecognizer::AdvanceCycle();
+  ++Cycle;
+}
+
+void MiniTPUHazardRecognizer::RecedeCycle() {
+  AIEHazardRecognizer::RecedeCycle();
+  --Cycle;
 }
 
 void MiniTPUHazardRecognizer::checkBundleAlone(const std::vector<SUnit *> &G) {
@@ -52,19 +103,22 @@ void MiniTPUHazardRecognizer::checkBundleAlone(const std::vector<SUnit *> &G) {
     }
     Empty.AIEHazardRecognizer::EmitInstruction(SU, 0);
   }
-}
-
-static bool isIssueTimeSRegReader(unsigned Opc) {
-  switch (Opc) {
-  case MiniTPU::VMEMLD:
-  case MiniTPU::VMEMLD_D:
-  case MiniTPU::VMEMST:
-  case MiniTPU::VMEMST_D:
-  case MiniTPU::LOOP_BEGIN_R_S:
-    return true;
-  default:
-    return false;
+  if (miniTPUInOrder())
+    return;
+  // Reorder mode: a write and an issue-time read of one SREG in one pinned
+  // bundle; in-order mode finds it through checkScalarLatency at distance 0.
+  SmallVector<unsigned, 4> Writes, Reads;
+  for (SUnit *SU : G) {
+    miniTPUSRegWrites(*SU->getInstr(), DAG->TRI, Writes);
+    miniTPUIssueTimeSRegReads(*SU->getInstr(), DAG->TRI, Reads);
   }
+  for (unsigned R : Reads)
+    if (llvm::is_contained(Writes, R))
+      report_fatal_error("MiniTPU schedule refused: S_LAT: one bundle writes "
+                         "s" + Twine(R) + " and reads it at issue; no gap "
+                         "separates them (asm.py counts a same-bundle write as "
+                         "distance 0)",
+                         false);
 }
 
 void MiniTPUHazardRecognizer::checkScalarLatency(const std::vector<SUnit *> &G,
@@ -79,23 +133,17 @@ void MiniTPUHazardRecognizer::checkScalarLatency(const std::vector<SUnit *> &G,
         Writes[TRI->getEncodingValue(MO.getReg())] = Index;
   for (SUnit *SU : G) {
     const MachineInstr &MI = *SU->getInstr();
-    const bool SOpReader = MI.getOpcode() == MiniTPU::SADDI ||
-                           MI.getOpcode() == MiniTPU::SMAC ||
-                           MI.getOpcode() == MiniTPU::SSHL;
-    if (!isIssueTimeSRegReader(MI.getOpcode()) && !(SLatAllReaders && SOpReader))
-      continue;
-    for (const MachineOperand &MO : MI.operands()) {
-      if (!MO.isReg() || !MO.isUse() || MO.isImplicit() ||
-          !MiniTPU::SREGRegClass.contains(MO.getReg()))
-        continue;
-      auto It = Writes.find(TRI->getEncodingValue(MO.getReg()));
+    SmallVector<unsigned, 4> Reads;
+    miniTPUIssueTimeSRegReads(MI, TRI, Reads);
+    for (unsigned R : Reads) {
+      auto It = Writes.find(R);
       if (It != Writes.end() && Index - It->second < SLat) {
         std::string S;
         raw_string_ostream OS(S);
         OS << MI;
         report_fatal_error(
-            "MiniTPU schedule refused: S_LAT: " + Twine(OS.str()) + " reads " +
-                TRI->getName(MO.getReg()) + " " + Twine(Index - It->second) +
+            "MiniTPU schedule refused: S_LAT: " + Twine(OS.str()) + " reads s" +
+                Twine(R) + " " + Twine(Index - It->second) +
                 " bundle(s) after its write; it needs " + Twine(SLat) +
                 ", and a stall cycle is a delay, not a bundle",
             false);
@@ -104,27 +152,50 @@ void MiniTPUHazardRecognizer::checkScalarLatency(const std::vector<SUnit *> &G,
   }
 }
 
+bool MiniTPUHazardRecognizer::scalarHazard(const SUnit *SU, int AtCycle) const {
+  const int SLat = getMiniTPUScheduleFact("ScalarLatencyBundles");
+  SmallVector<unsigned, 4> Reads;
+  miniTPUIssueTimeSRegReads(*SU->getInstr(), DAG->TRI, Reads);
+  for (unsigned R : Reads) {
+    auto It = LastSWriteCycle.find(R);
+    if (It != LastSWriteCycle.end() && AtCycle - It->second < SLat)
+      return true;
+  }
+  return false;
+}
+
 ScheduleHazardRecognizer::HazardType
 MiniTPUHazardRecognizer::getHazardType(SUnit *SU, int DeltaCycles) {
-  if (!miniTPUInOrder())
-    return AIEHazardRecognizer::getHazardType(SU, DeltaCycles);
   MiniTPUBundleGroups &BG = groups();
-  if (!BG.isLeader(SU))
-    return AIEHazardRecognizer::getHazardType(SU, DeltaCycles);
+  if (!BG.isLeader(SU)) {
+    HazardType H = AIEHazardRecognizer::getHazardType(SU, DeltaCycles);
+    if (H != NoHazard || miniTPUInOrder() || BG.isGrouped(SU))
+      return H;
+    return scalarHazard(SU, Cycle + DeltaCycles) ? Hazard : NoHazard;
+  }
   // The whole bundle must fit this cycle, or none of it issues here.
   AIEHazardRecognizer Trial(*this);
   for (SUnit *M : BG.Groups[BG.GroupOf[SU]]) {
     if (Trial.AIEHazardRecognizer::getHazardType(M, DeltaCycles) != NoHazard)
       return NoopHazard;
     Trial.AIEHazardRecognizer::EmitInstruction(M, DeltaCycles);
+    if (!miniTPUInOrder() && scalarHazard(M, Cycle + DeltaCycles))
+      return Hazard;
   }
   return NoHazard;
 }
 
 void MiniTPUHazardRecognizer::EmitInstruction(SUnit *SU, int DeltaCycles) {
   AIEHazardRecognizer::EmitInstruction(SU, DeltaCycles);
-  if (!miniTPUInOrder())
+  if (!miniTPUInOrder()) {
+    SmallVector<unsigned, 4> Writes;
+    miniTPUSRegWrites(*SU->getInstr(), DAG->TRI, Writes);
+    for (unsigned W : Writes) {
+      int &Last = LastSWriteCycle[W];
+      Last = std::max(Last, Cycle + DeltaCycles);
+    }
     return;
+  }
   MiniTPUBundleGroups &BG = groups();
   if (!BG.isLeader(SU))
     return;

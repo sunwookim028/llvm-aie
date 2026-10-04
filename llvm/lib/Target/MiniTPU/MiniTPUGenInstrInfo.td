@@ -204,6 +204,7 @@ def NOPM : MiniTPUInst_M<(outs ), (ins ),
 def VLD : MiniTPUInst_Mem<(outs VREG:$vd), (ins uimm12_0_4095:$word),
     "vld", "$vd, $word"> {
   let Itinerary = II_VLD;
+  let mayLoad = 1;   // VMEM through the compute port (docs/isa_latency.json)
   bits<5> vd;
   bits<12> word;
   let mem = {0b01, 0b0, vd{4-0}, word{11-0}, 0b0, 0b00, 0b000, 0b0, 0b000000, 0b0};
@@ -213,6 +214,7 @@ def VLD_AGU : MiniTPUInst_Mem<(outs VREG:$vd), (ins uimm12_0_4095:$word, uimm3_0
     "vld.agu", "$vd, $word, $level, $shift"> {
   let Itinerary = II_VLD;
   let Uses = [LOOPS];
+  let mayLoad = 1;   // VMEM through the compute port (docs/isa_latency.json)
   bits<5> vd;
   bits<12> word;
   bits<3> level;
@@ -223,6 +225,7 @@ def VLD_AGU : MiniTPUInst_Mem<(outs VREG:$vd), (ins uimm12_0_4095:$word, uimm3_0
 def VST : MiniTPUInst_Mem<(outs ), (ins VREG:$vs, uimm12_0_4095:$word),
     "vst", "$vs, $word"> {
   let Itinerary = II_VST;
+  let mayStore = 1;  // VMEM through the compute port (docs/isa_latency.json)
   bits<5> vs;
   bits<12> word;
   let mem = {0b01, 0b1, vs{4-0}, word{11-0}, 0b0, 0b00, 0b000, 0b0, 0b000000, 0b0};
@@ -232,6 +235,7 @@ def VST_AGU : MiniTPUInst_Mem<(outs ), (ins VREG:$vs, uimm12_0_4095:$word, uimm3
     "vst.agu", "$vs, $word, $level, $shift"> {
   let Itinerary = II_VST;
   let Uses = [LOOPS];
+  let mayStore = 1;  // VMEM through the compute port (docs/isa_latency.json)
   bits<5> vs;
   bits<12> word;
   bits<3> level;
@@ -449,4 +453,26 @@ def NODELAY : MiniTPUInst_Delay<(outs ), (ins ),
   let isSlotNOP = true;
   let isCodeGenOnly = 1;
   let delay = {0b0000000};
+}
+
+// EXPERIMENTAL (isa_experimental.json): in the scheduling model only. No encoding: every fixed bit is zero
+// and the code emitter refuses the opcode.
+def LOCK_ACQUIRE : MiniTPUInst_C<(outs ), (ins uimm4_0_15:$id, uimm12_0_4095:$word, uimm12m1_1_4096:$count),
+    "lock.acquire", "$id, $word, $count"> {
+  let Itinerary = II_LOCK_ACQUIRE;
+  let hasSideEffects = 1;
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+  let c = {0b000, 0b0000};
+}
+
+// EXPERIMENTAL (isa_experimental.json): in the scheduling model only. No encoding: every fixed bit is zero
+// and the code emitter refuses the opcode.
+def LOCK_RELEASE : MiniTPUInst_C<(outs ), (ins uimm4_0_15:$id, uimm12_0_4095:$word, uimm12m1_1_4096:$count),
+    "lock.release", "$id, $word, $count"> {
+  let Itinerary = II_LOCK_RELEASE;
+  let hasSideEffects = 1;
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+  let c = {0b000, 0b0000};
 }

@@ -17,6 +17,7 @@ include "MiniTPUGenRegisterInfo.td"
 include "MiniTPUGenSchedule.td"
 include "MiniTPUGenSlots.td"
 include "MiniTPUGenInstrInfo.td"
+include "MiniTPUPseudos.td"
 
 def : ProcessorModel<"minitpu", MiniTPUSchedModel, []>;
 

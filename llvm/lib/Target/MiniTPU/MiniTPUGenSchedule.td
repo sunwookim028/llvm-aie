@@ -24,11 +24,14 @@ def MXU_WEIGHT_BANK_1 : FuncUnit;  // declared; the switch rule is below, not a 
 def ISSUE_IMM : FuncUnit;  // one IMM a bundle: asm._imm_owners() (ISA-A01)
 def ISSUE_NEXT_STATE : FuncUnit;  // descriptor or control op: isa_slots.json issue_exclusive
 def ISSUE_PORT_C : FuncUnit;  // one consumer of contended VREG read port C a bundle (ISA-E04)
+def LOCK_UNIT : FuncUnit;  // EXPERIMENTAL (isa_experimental.json): held by a lock op for 4 cycles
 
 def II_C_IMM_NEXT_STATE : InstrItinClass;
 def II_C_NEXT_STATE : InstrItinClass;
 def II_DELAY : InstrItinClass;
 def II_IMM : InstrItinClass;
+def II_LOCK_ACQUIRE : InstrItinClass;
+def II_LOCK_RELEASE : InstrItinClass;
 def II_NOP : InstrItinClass;
 def II_S : InstrItinClass;
 def II_S_IMM : InstrItinClass;
@@ -58,11 +61,13 @@ def II_VTXIN : InstrItinClass;
 def II_VTXOUT : InstrItinClass;
 
 def MiniTPUItineraries : ProcessorItineraries<
-  [EMPTY_FU, VREG_WRITE_PORT, VREG_READ_PORT_C, MXU_STREAM_ENGINE, MXU_POP_ENGINE, MXU_WEIGHT_BANK_0, MXU_WEIGHT_BANK_1, ISSUE_IMM, ISSUE_NEXT_STATE, ISSUE_PORT_C], [], [
+  [EMPTY_FU, VREG_WRITE_PORT, VREG_READ_PORT_C, MXU_STREAM_ENGINE, MXU_POP_ENGINE, MXU_WEIGHT_BANK_0, MXU_WEIGHT_BANK_1, ISSUE_IMM, ISSUE_NEXT_STATE, ISSUE_PORT_C, LOCK_UNIT], [], [
   InstrItinData<II_C_IMM_NEXT_STATE, [InstrStage<1, [ISSUE_IMM], 0>, InstrStage<1, [ISSUE_NEXT_STATE], 0>], []>,
   InstrItinData<II_C_NEXT_STATE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>], []>,
   InstrItinData<II_DELAY, [], [0, 0, 0, 0, 0]>,
   InstrItinData<II_IMM, [], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_LOCK_ACQUIRE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>, InstrStage<4, [LOCK_UNIT], 0>], [0, 0, 0, 0, 0]>,
+  InstrItinData<II_LOCK_RELEASE, [InstrStage<1, [ISSUE_NEXT_STATE], 0>, InstrStage<4, [LOCK_UNIT], 0>], [0, 0, 0, 0, 0]>,
   InstrItinData<II_NOP, [], []>,
   InstrItinData<II_S, [], [0, 0, 0, 0, 0]>,
   InstrItinData<II_S_IMM, [InstrStage<1, [ISSUE_IMM], 0>], [0, 0, 0, 0, 0]>,
@@ -120,6 +125,8 @@ def : MiniTPUScheduleFact<"VmatloadStreamLast", 16>;
 def : MiniTPUScheduleFact<"VmatpushStreamLast", 4>;
 def : MiniTPUScheduleFact<"StreamCyclesPerVreg", 4>;
 def : MiniTPUScheduleFact<"VmatloadVregs", 4>;
+def : MiniTPUScheduleFact<"LockCoreStallCycle", 0>;
+def : MiniTPUScheduleFact<"LockCoreResumeCycle", 2>;
 def MiniTPUScheduleFacts : GenericTable {
   let FilterClass = "MiniTPUScheduleFact";
   let Fields = ["Name", "Value"];

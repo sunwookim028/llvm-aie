@@ -20,7 +20,8 @@ using namespace llvm;
 static cl::opt<bool> InOrder(
     "minitpu-in-order", cl::init(true),
     cl::desc("MiniTPU: keep program order and the placed bundles; the "
-             "scheduler only inserts stall cycles (gate G3)"));
+             "scheduler only inserts stall cycles (gate G3). Off: reorder "
+             "the free instructions between the pinned bundles (gate G4)"));
 
 bool llvm::miniTPUInOrder() { return InOrder; }
 
@@ -64,8 +65,12 @@ MiniTPUTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
     DAG->addMutation(std::move(M));
   DAG->addMutation(createMiniTPUControlSinkExit());
   DAG->addMutation(createMiniTPUMatrixEdges());
-  if (miniTPUInOrder())
+  if (miniTPUInOrder()) {
     DAG->addMutation(createMiniTPUInOrderBundles());
+  } else {
+    DAG->addMutation(createMiniTPUPinnedGroups());
+    DAG->addMutation(createMiniTPULockEdges());
+  }
   return DAG;
 }
 

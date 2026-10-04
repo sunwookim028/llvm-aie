@@ -97,11 +97,17 @@ static const struct { unsigned Opcode, OpIdx; int64_t Lo, Hi; } OperandRanges[] 
     {MiniTPU::IMM_LOOP, 1, 0, 15},
     {MiniTPU::IMM_LOOP, 2, 0, 65535},
     {MiniTPU::DELAY, 0, 0, 127},
+    {MiniTPU::LOCK_ACQUIRE, 0, 0, 15},
+    {MiniTPU::LOCK_ACQUIRE, 1, 0, 4095},
+    {MiniTPU::LOCK_ACQUIRE, 2, 1, 4096},
+    {MiniTPU::LOCK_RELEASE, 0, 0, 15},
+    {MiniTPU::LOCK_RELEASE, 1, 0, 4095},
+    {MiniTPU::LOCK_RELEASE, 2, 1, 4096},
 };
 #endif // GET_OPERAND_RANGES
 
 #ifdef GET_FUNCUNIT_NAMES
 #undef GET_FUNCUNIT_NAMES
 // Bit i of an itinerary stage's unit mask names entry i.
-static const char *const FuncUnitNames[] = {"EMPTY_FU", "VREG_WRITE_PORT", "VREG_READ_PORT_C", "MXU_STREAM_ENGINE", "MXU_POP_ENGINE", "MXU_WEIGHT_BANK_0", "MXU_WEIGHT_BANK_1", "ISSUE_IMM", "ISSUE_NEXT_STATE", "ISSUE_PORT_C"};
+static const char *const FuncUnitNames[] = {"EMPTY_FU", "VREG_WRITE_PORT", "VREG_READ_PORT_C", "MXU_STREAM_ENGINE", "MXU_POP_ENGINE", "MXU_WEIGHT_BANK_0", "MXU_WEIGHT_BANK_1", "ISSUE_IMM", "ISSUE_NEXT_STATE", "ISSUE_PORT_C", "LOCK_UNIT"};
 #endif // GET_FUNCUNIT_NAMES

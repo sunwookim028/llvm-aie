@@ -1,0 +1,65 @@
+# EXPERIMENTAL lock (docs/isa_experimental.json, gate G5): a barrier for the VMEM words it guards.
+# RUN: llc -mtriple=minitpu -run-pass=postmisched,minitpu-fold-delays -minitpu-in-order=false %s -o - \
+# RUN:   | FileCheck %s
+# RUN: not llvm-mc -triple=minitpu %S/Inputs/lock.s -o /dev/null 2>&1 | FileCheck %s --check-prefix=MC
+#
+# reach: lock.acquire 0 guards words [8, 12). In program order: vst v1 -> 8 and vst v6 -> 100 before it,
+# vld 8 and vld 200 after it. The guarded accesses stay on their side of the acquire: vst 8 before it
+# (its memory cycle 0 - LockCoreStallCycle 0 + 1 = 1 cycle earlier at least), vld 8 after it
+# (LockCoreResumeCycle 2 - 0 + 1 = 3 cycles later at least: the acquire's bundle holds 2). The accesses
+# that cannot touch [8, 12) cross it: vld 200 is hoisted above it, and vst 100, whose operand is ready
+# late, sinks below it and below the release. The release comes 1 cycle after vld 8 and holds
+# the guarded vst 9 by 3 (the disjoint vst 100 issues the cycle after it). Nothing in
+# lib/CodeGen or lib/Target/AIE knows the window: AIE's LockDelays mutation sets the latencies through
+# MiniTPUInstrInfo::isLock and the lock cycles, and MiniTPU's LockEdges mutation detaches the accesses
+# whose window cannot meet the lock's.
+#
+# CHECK-LABEL: name: reach
+# CHECK:       VLD 200
+# CHECK:       VST $v1, 8
+# CHECK:       LOCK_ACQUIRE 0, 8, 4
+# CHECK-NEXT:  DELAY 2
+# CHECK:       $v3 = VLD 8
+# CHECK:       LOCK_RELEASE 0, 8, 4
+# CHECK-NEXT:  DELAY 1
+# CHECK:       VST {{.*}}, 100
+# CHECK:       VST {{.*}}, 9
+#
+# hold: a lock holds LOCK_UNIT for 4 cycles (isa_experimental.json unit.hold_cycles), so the next lock
+# issues 4 cycles later; both are C-slot ops with ISSUE_NEXT_STATE, so neither shares a bundle with halt.
+# CHECK-LABEL: name: hold
+# CHECK:       LOCK_ACQUIRE 0, 0, 1
+# CHECK-NEXT:  DELAY 3
+# CHECK:       LOCK_ACQUIRE 1, 16, 1
+#
+# The op has no encoding: the assembler does not know it.
+# MC: error: {{.*}}
+---
+name: reach
+tracksRegLiveness: false
+body: |
+  bb.0:
+    $v1 = VLD 0 :: (load (s1024))
+    $v2 = VLD 1 :: (load (s1024))
+    $v6 = VADD $v2, $v2
+    VST $v1, 8 :: (store (s1024))
+    VST $v6, 100 :: (store (s1024))
+    LOCK_ACQUIRE 0, 8, 4
+    $v3 = VLD 8 :: (load (s1024))
+    $v4 = VLD 200 :: (load (s1024))
+    $v5 = VADD $v3, $v4
+    LOCK_RELEASE 0, 8, 4
+    VST $v5, 9 :: (store (s1024))
+    HALT implicit $dmaq, implicit $v0, implicit $v1, implicit $v2, implicit $v3, implicit $v4, implicit $v5, implicit $v6, implicit $v7, implicit $v8, implicit $v9, implicit $v10, implicit $v11, implicit $v12, implicit $v13, implicit $v14, implicit $v15, implicit $v16, implicit $v17, implicit $v18, implicit $v19, implicit $v20, implicit $v21, implicit $v22, implicit $v23, implicit $v24, implicit $v25, implicit $v26, implicit $v27, implicit $v28, implicit $v29, implicit $v30, implicit $v31
+    DELAY_GROUP 1, 0
+...
+---
+name: hold
+tracksRegLiveness: false
+body: |
+  bb.0:
+    LOCK_ACQUIRE 0, 0, 1
+    LOCK_ACQUIRE 1, 16, 1
+    HALT implicit $dmaq, implicit $v0, implicit $v1, implicit $v2, implicit $v3, implicit $v4, implicit $v5, implicit $v6, implicit $v7, implicit $v8, implicit $v9, implicit $v10, implicit $v11, implicit $v12, implicit $v13, implicit $v14, implicit $v15, implicit $v16, implicit $v17, implicit $v18, implicit $v19, implicit $v20, implicit $v21, implicit $v22, implicit $v23, implicit $v24, implicit $v25, implicit $v26, implicit $v27, implicit $v28, implicit $v29, implicit $v30, implicit $v31
+    DELAY_GROUP 1, 0
+...

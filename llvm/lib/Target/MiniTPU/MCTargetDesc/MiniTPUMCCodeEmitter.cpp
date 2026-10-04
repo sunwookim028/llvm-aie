@@ -37,6 +37,26 @@ public:
                              APInt &Inst, APInt &Scratch,
                              const MCSubtargetInfo &STI) const override;
 
+  /// A pseudo has no encoding: the EXPERIMENTAL ops of docs/isa_experimental.json
+  /// and the scheduler's own markers. Refuse them rather than emit their zero
+  /// fixed bits, which would be a silent NOP in the slot.
+  void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
+                         SmallVectorImpl<MCFixup> &Fixups,
+                         const MCSubtargetInfo &STI) const override {
+    auto Refuse = [&](const MCInst &Sub) {
+      if (MCII.get(Sub.getOpcode()).isPseudo())
+        report_fatal_error("MiniTPU: " + Twine(MCII.getName(Sub.getOpcode())) +
+                               " is a pseudo with no encoding (experimental or "
+                               "codegen-only); it cannot be emitted",
+                           false);
+    };
+    Refuse(MI);
+    for (const MCOperand &Op : MI)
+      if (Op.isInst())
+        Refuse(*Op.getInst());
+    AIEBaseMCCodeEmitter::encodeInstruction(MI, CB, Fixups, STI);
+  }
+
   /// A count spelled as itself and encoded minus one (descriptor rows).
   void getUImmMinusOneOpValue(const MCInst &MI, unsigned OpNo, APInt &Op,
                               SmallVectorImpl<MCFixup> &Fixups,
